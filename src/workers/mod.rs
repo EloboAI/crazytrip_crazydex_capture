@@ -149,7 +149,13 @@ impl AnalysisWorker {
         let vision_result = loop {
             attempts += 1;
             
-            match self.ai_service.analyze_image(&image_bytes).await {
+            match self.ai_service.analyze_image(
+                &image_bytes,
+                capture.location.as_ref(),
+                capture.location_info.as_ref(),
+                capture.orientation.as_ref(),
+                Some(&capture.created_at),
+            ).await {
                 Ok(v) => {
                     log::info!("fin ********8 - ai analyze end: {} (attempt {})", capture_id, attempts);
                     break v;
@@ -194,6 +200,12 @@ impl AnalysisWorker {
             .unwrap_or("EASY")
             .to_string();
         
+        // Extract verified field (default to false if not present)
+        let verified = vision_result
+            .get("verified")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        
         // Extract tags (default to empty array if not present)
         let tags: Vec<String> = vision_result
             .get("tags")
@@ -206,13 +218,13 @@ impl AnalysisWorker {
             })
             .unwrap_or_default();
 
-        log::info!("Extracted metadata: category={}, confidence={}, difficulty={}, tags={:?}", 
-                   category, confidence, difficulty, tags);
+        log::info!("Extracted metadata: category={}, confidence={}, difficulty={}, verified={}, tags={:?}", 
+                   category, confidence, difficulty, verified, tags);
 
         // Update capture with analysis result
         log::info!("inicio ******** 9 - update capture analysis start: {}", capture_id);
         if let Err(e) = self.db_service
-            .update_capture_analysis(capture_id, &vision_result, &category, confidence, &difficulty)
+            .update_capture_analysis(capture_id, &vision_result, &category, confidence, &difficulty, verified)
             .await {
             log::error!("Failed to update capture analysis {}: {}", capture_id, e);
             return Ok(());

@@ -135,7 +135,7 @@ impl DatabaseService {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             RETURNING id, user_id, device_local_id, image_url, thumbnail_url, image_size, storage_type,
                       vision_result, category, confidence, tags, location, location_info, orientation,
-                      is_deleted, created_at, updated_at
+                      is_deleted, created_at, updated_at, difficulty, verified
         ", &[
             &id, &req.user_id, &req.device_local_id, &req.image_url, &req.thumbnail_url, &req.image_size,
             &req.vision_result, &req.category, &req.confidence, &req.tags, &req.location, &req.location_info,
@@ -152,7 +152,7 @@ impl DatabaseService {
         let rows = client.query("
             SELECT id, user_id, device_local_id, image_url, thumbnail_url, image_size, storage_type,
                    vision_result, category, confidence, tags, location, location_info, orientation,
-                   is_deleted, created_at, updated_at
+                   is_deleted, created_at, updated_at, difficulty, verified
             FROM captures WHERE id = $1 AND is_deleted = false
         ", &[id]).await?;
 
@@ -185,13 +185,13 @@ impl DatabaseService {
         let query = if user_id.is_some() {
             "SELECT id, user_id, device_local_id, image_url, thumbnail_url, image_size, storage_type,
                     vision_result, category, confidence, tags, location, location_info, orientation,
-                    is_deleted, created_at, updated_at
+                    is_deleted, created_at, updated_at, difficulty, verified
              FROM captures WHERE user_id = $1 AND is_deleted = false
              ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         } else {
             "SELECT id, user_id, device_local_id, image_url, thumbnail_url, image_size, storage_type,
                     vision_result, category, confidence, tags, location, location_info, orientation,
-                    is_deleted, created_at, updated_at
+                    is_deleted, created_at, updated_at, difficulty, verified
              FROM captures WHERE is_deleted = false
              ORDER BY created_at DESC LIMIT $1 OFFSET $2"
         };
@@ -220,7 +220,7 @@ impl DatabaseService {
             WHERE id = $1 AND is_deleted = false
             RETURNING id, user_id, device_local_id, image_url, thumbnail_url, image_size, storage_type,
                       vision_result, category, confidence, tags, location, location_info, orientation,
-                      is_deleted, created_at, updated_at
+                      is_deleted, created_at, updated_at, difficulty, verified
         ", &[id, &req.tags, &req.category, &now]).await?;
 
         Ok(row.map(|r| Self::row_to_capture(&r)))
@@ -291,7 +291,7 @@ impl DatabaseService {
     }
 
     /// Update capture with analysis result
-    pub async fn update_capture_analysis(&self, capture_id: &Uuid, vision_result: &serde_json::Value, category: &str, confidence: f64, difficulty: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn update_capture_analysis(&self, capture_id: &Uuid, vision_result: &serde_json::Value, category: &str, confidence: f64, difficulty: &str, verified: bool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let client = self.get_client().await?;
 
         let result = client.execute("
@@ -300,9 +300,10 @@ impl DatabaseService {
                 category = $3, 
                 confidence = $4, 
                 difficulty = $5, 
+                verified = $6,
                 updated_at = NOW()
             WHERE id = $1
-        ", &[capture_id, vision_result, &category, &confidence, &difficulty]).await;
+        ", &[capture_id, vision_result, &category, &confidence, &difficulty, &verified]).await;
 
         match result {
             Ok(rows) => {
@@ -403,6 +404,8 @@ impl DatabaseService {
             is_deleted: row.get(14),
             created_at: row.get(15),
             updated_at: row.get(16),
+            difficulty: row.get(17),
+            verified: row.get(18),
         }
     }
 }

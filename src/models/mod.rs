@@ -23,6 +23,8 @@ pub struct Capture {
     pub is_deleted: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub difficulty: Option<String>,
+    pub verified: Option<bool>,
 }
 
 /// Request para crear una captura
