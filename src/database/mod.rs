@@ -278,16 +278,110 @@ impl DatabaseService {
         Ok(())
     }
 
-    /// Update capture with analysis result
-    pub async fn update_capture_analysis(&self, capture_id: &Uuid, vision_result: &serde_json::Value, category: &str, confidence: f64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    /// Increment analysis attempts counter
+    pub async fn increment_analysis_attempts(&self, capture_id: &Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let client = self.get_client().await?;
 
         client.execute("
-            UPDATE captures SET vision_result = $2, category = $3, confidence = $4, updated_at = NOW()
-            WHERE id = $1
-        ", &[capture_id, vision_result, &category, &confidence]).await?;
+            UPDATE analysis_queue SET attempts = attempts + 1, last_attempt = NOW()
+            WHERE capture_id = $1
+        ", &[capture_id]).await?;
 
         Ok(())
+    }
+
+    /// Update capture with analysis result
+    pub async fn update_capture_analysis(&self, capture_id: &Uuid, vision_result: &serde_json::Value, category: &str, confidence: f64, difficulty: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.get_client().await?;
+
+        let result = client.execute("
+            UPDATE captures 
+            SET vision_result = $2, 
+                category = $3, 
+                confidence = $4, 
+                difficulty = $5, 
+                updated_at = NOW()
+            WHERE id = $1
+        ", &[capture_id, vision_result, &category, &confidence, &difficulty]).await;
+
+        match result {
+            Ok(rows) => {
+                if rows == 0 {
+                    log::warn!("No rows updated for capture {}", capture_id);
+                }
+                Ok(())
+            },
+            Err(e) => {
+                log::error!("Database error updating capture {}: {:?}", capture_id, e);
+                Err(Box::new(e))
+            }
+        }
+    }
+
+    /// Upsert a tag (insert if not exists, return existing if it does)
+    pub async fn upsert_tag(&self, name: &str) -> Result<Uuid, Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.get_client().await?;
+        
+        let row = client.query_one("
+            INSERT INTO tags (name) VALUES ($1)
+            ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+            RETURNING id
+        ", &[&name]).await?;
+        
+        Ok(row.get(0))
+    }
+
+    /// Insert a capture-tag relationship
+    pub async fn insert_capture_tag(&self, capture_id: &Uuid, tag_id: &Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.get_client().await?;
+        
+        client.execute("
+            INSERT INTO capture_tags (capture_id, tag_id) 
+            VALUES ($1, $2) 
+            ON CONFLICT DO NOTHING
+        ", &[capture_id, tag_id]).await?;
+        
+        Ok(())
+    }
+
+    /// Get all tags for a capture
+    pub async fn get_tags_for_capture(&self, capture_id: &Uuid) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.get_client().await?;
+        
+        let rows = client.query("
+            SELECT t.name FROM tags t
+            JOIN capture_tags ct ON t.id = ct.tag_id
+            WHERE ct.capture_id = $1
+            ORDER BY t.name
+        ", &[capture_id]).await?;
+        
+        Ok(rows.iter().map(|r| r.get(0)).collect())
+    }
+
+    /// Save tags for a capture (replaces existing tags)
+    pub async fn save_capture_tags(&self, capture_id: &Uuid, tag_names: &[String]) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Delete existing tags for this capture
+        let client = self.get_client().await?;
+        client.execute("DELETE FROM capture_tags WHERE capture_id = $1", &[capture_id]).await?;
+        
+        // Insert new tags
+        for tag_name in tag_names {
+            let tag_id = self.upsert_tag(tag_name).await?;
+            self.insert_capture_tag(capture_id, &tag_id).await?;
+        }
+        
+        Ok(())
+    }
+
+    /// Get all unique tags in the system
+    pub async fn get_all_tags(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.get_client().await?;
+        
+        let rows = client.query("
+            SELECT name FROM tags ORDER BY name
+        ", &[]).await?;
+        
+        Ok(rows.iter().map(|r| r.get(0)).collect())
     }
 
     fn row_to_capture(row: &tokio_postgres::Row) -> Capture {

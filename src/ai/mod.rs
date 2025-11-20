@@ -49,6 +49,7 @@ struct ResponsePart {
 pub struct AIService {
     api_key: String,
     endpoint: String,
+    model: String,
     http_client: reqwest::Client,
 }
 
@@ -57,6 +58,7 @@ impl AIService {
         Self {
             api_key: config.gemini_api_key.clone(),
             endpoint: config.gemini_endpoint.clone(),
+            model: config.gemini_model.clone(),
             http_client: reqwest::Client::new(),
         }
     }
@@ -72,15 +74,29 @@ impl AIService {
 {
   "name": "Nombre del lugar, monumento, animal o concepto principal",
   "type": "LUGAR/MONUMENTO/NATURALEZA/ANIMAL/OBJETO/OTRO",
-  "category": "Categoría específica (LANDMARK/NATURE/WILDLIFE/FOOD/ARCHITECTURE/etc)",
+  "category": "Categoría específica (LANDMARK/NATURE/WILDLIFE/FOOD/ARCHITECTURE/ART/CULTURE/TRANSPORTATION)",
+  "tags": ["descriptive", "searchable", "keywords"],
   "description": "Descripción detallada de lo que se ve",
   "rarity": "COMMON/UNCOMMON/RARE/VERY_RARE/LEGENDARY",
   "confidence": 0.95,
+  "difficulty": "EASY/MEDIUM/HARD/EXPERT",
   "specificity_level": "Nivel de especificidad de la identificación",
   "broader_context": "Contexto más amplio o información adicional",
   "encounter_rarity": "Qué tan difícil es encontrar esto aquí",
   "authenticity": "AUTHENTIC/REPLICA/UNCERTAIN"
 }
+
+REGLAS para tags (3-8 tags por imagen):
+- Incluir: características físicas, contexto cultural, época, materiales, colores dominantes, ubicación geográfica
+- Formato: lowercase, sin acentos, singular, en español
+- Ejemplos: ["volcanico", "unesco", "colonial", "turquesa", "cascada", "tropical"]
+- Evitar: duplicar el nombre exacto o la categoría
+
+REGLAS para difficulty:
+- EASY: Muy común, fácil de encontrar, visible desde lejos
+- MEDIUM: Requiere buscar un poco, moderadamente común
+- HARD: Difícil de encontrar, requiere esfuerzo o conocimiento local
+- EXPERT: Extremadamente raro, requiere condiciones especiales o permiso
 
 Responde ÚNICAMENTE con el JSON, sin texto adicional."#;
 
@@ -100,7 +116,10 @@ Responde ÚNICAMENTE con el JSON, sin texto adicional."#;
             }],
         };
 
-        let url = format!("{}?key={}", self.endpoint, self.api_key);
+        // Build model generateContent URL: {endpoint}/{model}:generateContent?key={API_KEY}
+        let url = format!("{}/{}:generateContent?key={}", self.endpoint, self.model, self.api_key);
+
+        log::info!("Sending request to Gemini API: {}/{}:generateContent", self.endpoint, self.model);
 
         let response = self
             .http_client
@@ -109,9 +128,13 @@ Responde ÚNICAMENTE con el JSON, sin texto adicional."#;
             .send()
             .await?;
 
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Gemini API error: {}", error_text).into());
+        let status = response.status();
+        log::info!("Gemini API response status: {}", status);
+
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|e| format!("Failed to read error body: {}", e));
+            log::error!("Gemini API error response: {}", error_text);
+            return Err(format!("Gemini API error ({}): {}", status, error_text).into());
         }
 
         let gemini_response: GeminiResponse = response.json().await?;
@@ -120,14 +143,27 @@ Responde ÚNICAMENTE con el JSON, sin texto adicional."#;
             return Err("No candidates returned from Gemini".into());
         }
 
+        if gemini_response.candidates[0].content.parts.is_empty() {
+            return Err("No parts in candidate response".into());
+        }
+
         let text = &gemini_response.candidates[0].content.parts[0].text;
+        log::info!("Gemini raw response text: {}", text);
 
         // Parse JSON from response
         let json_start = text.find('{').unwrap_or(0);
         let json_end = text.rfind('}').unwrap_or(text.len());
+        
+        if json_start >= json_end {
+            log::error!("No valid JSON found in response: {}", text);
+            return Err("No valid JSON in Gemini response".into());
+        }
+        
         let json_str = &text[json_start..=json_end];
+        log::info!("Extracted JSON: {}", json_str);
 
-        let vision_result: serde_json::Value = serde_json::from_str(json_str)?;
+        let vision_result: serde_json::Value = serde_json::from_str(json_str)
+            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
 
         log::info!("Image analyzed successfully");
         Ok(vision_result)

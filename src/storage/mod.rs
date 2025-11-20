@@ -54,6 +54,7 @@ impl S3Service {
         content_type: &str,
         expires_in_seconds: u64,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        log::info!("inicio ******** 2 - generate_presigned_put_url start: {}", object_key);
         let presigning_config = PresigningConfig::expires_in(Duration::from_secs(expires_in_seconds))?;
 
         let presigned_request = self
@@ -74,6 +75,7 @@ impl S3Service {
         object_key: &str,
         expires_in_seconds: u64,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        log::info!("inicio ******** 2b - generate_presigned_get_url start: {}", object_key);
         let presigning_config = PresigningConfig::expires_in(Duration::from_secs(expires_in_seconds))?;
 
         let presigned_request = self
@@ -84,8 +86,12 @@ impl S3Service {
             .presigned(presigning_config)
             .await?;
 
+        log::info!("fin ********2b - generate_presigned_get_url end: {}", object_key);
         Ok(presigned_request.uri().to_string())
     }
+
+    /// Generate presigned GET URL for download
+    // (duplicate removed) the presigned GET url method is defined above with logging
 
     /// Upload bytes directly to S3
     pub async fn upload_bytes(
@@ -94,6 +100,7 @@ impl S3Service {
         data: Vec<u8>,
         content_type: &str,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        log::info!("inicio ******** 2 - upload_bytes start: {} ({} bytes)", object_key, data.len());
         self.client
             .put_object()
             .bucket(&self.bucket)
@@ -103,11 +110,14 @@ impl S3Service {
             .send()
             .await?;
 
-        Ok(format!("https://{}.s3.amazonaws.com/{}", self.bucket, object_key))
+        let public = format!("https://{}.s3.amazonaws.com/{}", self.bucket, object_key);
+        log::info!("fin ********2 - upload_bytes end: {}", object_key);
+        Ok(public)
     }
 
     /// Download object from S3
     pub async fn download_object(&self, object_key: &str) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+        log::info!("inicio ******** 2 - download_object start: {}", object_key);
         let response = self
             .client
             .get_object()
@@ -116,8 +126,10 @@ impl S3Service {
             .send()
             .await?;
 
-        let data = response.body.collect().await?;
-        Ok(data.into_bytes().to_vec())
+        let body = response.body.collect().await?;
+        let bytes = body.into_bytes();
+        log::info!("fin ********2 - download_object end: {} ({} bytes)", object_key, bytes.len());
+        Ok(bytes.to_vec())
     }
 
     /// Delete object from S3
@@ -134,7 +146,10 @@ impl S3Service {
 
     /// Get public URL for object
     pub fn get_public_url(&self, object_key: &str) -> String {
-        format!("https://{}.s3.amazonaws.com/{}", self.bucket, object_key)
+        let url = format!("https://{}.s3.amazonaws.com/{}", self.bucket, object_key);
+        log::info!("inicio ******** 2c - get_public_url: {} -> {}", object_key, url);
+        log::info!("fin ********2c - get_public_url end: {}", object_key);
+        url
     }
 
     /// Generate unique object key

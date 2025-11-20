@@ -49,6 +49,7 @@ pub struct StorageConfig {
 pub struct AIConfig {
     pub gemini_api_key: String,
     pub gemini_endpoint: String,
+    pub gemini_model: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,7 +101,8 @@ impl AppConfig {
         let max_image_size_bytes = env::var("MAX_IMAGE_SIZE_BYTES").unwrap_or_else(|_| "10485760".to_string()).parse::<usize>()?;
 
         let gemini_api_key = env::var("GEMINI_API_KEY")?;
-        let gemini_endpoint = env::var("GEMINI_ENDPOINT").unwrap_or_else(|_| "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent".to_string());
+        let gemini_endpoint = env::var("GEMINI_ENDPOINT").unwrap_or_else(|_| "https://generativelanguage.googleapis.com/v1".to_string());
+        let gemini_model = env::var("GEMINI_MODEL").unwrap_or_else(|_| "models/gemini-2.5-flash".to_string());
 
         let cors_allowed_origins = env::var("CORS_ALLOWED_ORIGINS")
             .unwrap_or_else(|_| "http://localhost:3000".to_string())
@@ -150,6 +152,7 @@ impl AppConfig {
             ai: AIConfig {
                 gemini_api_key,
                 gemini_endpoint,
+                gemini_model,
             },
             security: SecurityConfig {
                 cors_allowed_origins,

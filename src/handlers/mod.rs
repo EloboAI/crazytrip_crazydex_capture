@@ -6,6 +6,7 @@ use validator::Validate;
 use crate::database::DatabaseService;
 use crate::models::*;
 use crate::storage::S3Service;
+use serde_json::Value as JsonValue;
 
 /// Health check endpoint
 pub async fn health_check() -> Result<HttpResponse> {
@@ -23,7 +24,7 @@ pub async fn generate_presigned_url(
     s3_service: web::Data<Arc<S3Service>>,
 ) -> Result<HttpResponse> {
     log::info!("📥 Received presigned URL request: filename={}, content_type={}", req.filename, req.content_type);
-    
+    log::info!("inicio ******** 1 - presign request start");
     if let Err(e) = req.validate() {
         log::warn!("❌ Validation error: {:?}", e);
         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("Validation error: {:?}", e))));
@@ -37,6 +38,7 @@ pub async fn generate_presigned_url(
             let public_url = s3_service.get_public_url(&object_key);
             
             log::info!("✅ Presigned URL generated successfully");
+            log::info!("fin ********1 - presign request end");
             log::debug!("   Upload URL: {}...", &upload_url[..50.min(upload_url.len())]);
             log::debug!("   Public URL: {}", public_url);
             
@@ -75,14 +77,22 @@ pub async fn create_capture(
         Ok(capture) => {
             log::info!("✅ Capture created successfully: ID={}", capture.id);
             
-            // Enqueue for analysis if no vision_result provided
-            if capture.vision_result.is_none() {
+            // Enqueue for analysis if no vision_result provided or if vision_result is an empty JSON object
+            let should_enqueue = match &capture.vision_result {
+                None => true,
+                Some(JsonValue::Object(map)) if map.is_empty() => true,
+                _ => false,
+            };
+
+            if should_enqueue {
+                log::info!("inicio ******** 3 - enqueue capture start: {}", capture.id);
                 log::info!("📋 Enqueueing capture for AI analysis...");
                 if let Err(e) = db_service.enqueue_analysis(&capture.id).await {
                     log::error!("❌ Failed to enqueue analysis: {}", e);
                 } else {
                     log::info!("✅ Capture enqueued for analysis");
                 }
+                log::info!("fin ********3 - enqueue capture end: {}", capture.id);
             } else {
                 log::info!("ℹ️  Capture already has vision_result, skipping analysis queue");
             }
@@ -213,8 +223,14 @@ pub async fn sync_upload(
                     image_url: capture.image_url,
                 });
 
-                // Enqueue for analysis if needed
-                if capture.vision_result.is_none() {
+                // Enqueue for analysis if needed (treat empty JSON object as none)
+                let should_enqueue = match &capture.vision_result {
+                    None => true,
+                    Some(JsonValue::Object(map)) if map.is_empty() => true,
+                    _ => false,
+                };
+
+                if should_enqueue {
                     let _ = db_service.enqueue_analysis(&capture.id).await;
                 }
             }
