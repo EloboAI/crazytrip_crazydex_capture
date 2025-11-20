@@ -168,21 +168,86 @@ pub async fn update_capture(
     }
 }
 
-/// Delete capture (soft delete)
+/// Delete capture (hard delete + S3 cleanup)
 pub async fn delete_capture(
     path: web::Path<Uuid>,
     db_service: web::Data<Arc<DatabaseService>>,
+    s3_service: web::Data<Arc<S3Service>>,
 ) -> Result<HttpResponse> {
     let capture_id = path.into_inner();
+    log::info!("🗑️ Deleting capture: {}", capture_id);
 
-    match db_service.delete_capture(&capture_id).await {
-        Ok(true) => Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-            "message": "Capture deleted successfully"
-        })))),
-        Ok(false) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Capture not found".to_string()))),
+    // 1. Get capture to find image URL and thumbnail URL
+    let capture = match db_service.get_capture_by_id(&capture_id).await {
+        Ok(Some(c)) => c,
+        Ok(None) => return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Capture not found".to_string()))),
         Err(e) => {
-            log::error!("Failed to delete capture: {}", e);
+            log::error!("Failed to retrieve capture for deletion: {}", e);
+            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to retrieve capture".to_string())));
+        }
+    };
+
+    log::info!("📸 Capture image_url: {}", capture.image_url);
+    log::info!("🖼️ Capture thumbnail_url: {:?}", capture.thumbnail_url);
+
+    // 2. Delete main image from S3
+    if let Some(object_key) = extract_key_from_url(&capture.image_url) {
+        log::info!("🗑️ Deleting S3 main image: {}", object_key);
+        if let Err(e) = s3_service.delete_object(&object_key).await {
+            log::error!("❌ Failed to delete S3 object {}: {}", object_key, e);
+            // Continue to delete from DB even if S3 fails
+        } else {
+            log::info!("✅ S3 main image deleted: {}", object_key);
+        }
+    } else {
+        log::warn!("⚠️ Could not extract S3 key from URL: {}", capture.image_url);
+    }
+
+    // 3. Delete thumbnail from S3 (if exists)
+    if let Some(thumbnail_url) = &capture.thumbnail_url {
+        if let Some(thumbnail_key) = extract_key_from_url(thumbnail_url) {
+            log::info!("🗑️ Deleting S3 thumbnail: {}", thumbnail_key);
+            if let Err(e) = s3_service.delete_object(&thumbnail_key).await {
+                log::error!("❌ Failed to delete S3 thumbnail {}: {}", thumbnail_key, e);
+                // Continue even if thumbnail deletion fails
+            } else {
+                log::info!("✅ S3 thumbnail deleted: {}", thumbnail_key);
+            }
+        }
+    }
+
+    // 4. Hard delete from DB
+    match db_service.hard_delete_capture(&capture_id).await {
+        Ok(true) => {
+            log::info!("✅ Capture deleted from DB: {}", capture_id);
+            Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "message": "Capture deleted permanently"
+            }))))
+        },
+        Ok(false) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Capture not found in DB".to_string()))),
+        Err(e) => {
+            log::error!("Failed to delete capture from DB: {}", e);
             Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to delete capture".to_string())))
+        }
+    }
+}
+
+fn extract_key_from_url(url: &str) -> Option<String> {
+    // Simple extraction: assume key starts after the domain
+    // Example: https://crazytrip-captures.s3.amazonaws.com/captures/123/abc.jpg
+    // Key: captures/123/abc.jpg
+    
+    if let Some(start_idx) = url.find(".com/") {
+        Some(url[start_idx + 5..].to_string())
+    } else if let Some(start_idx) = url.find("/captures/") {
+        // Fallback if domain format is different but path is standard
+        Some(url[start_idx + 1..].to_string())
+    } else {
+        // Maybe it IS the key?
+        if !url.starts_with("http") {
+            Some(url.to_string())
+        } else {
+            None
         }
     }
 }

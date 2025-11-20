@@ -238,6 +238,17 @@ impl DatabaseService {
         Ok(result > 0)
     }
 
+    /// Hard delete capture (permanently remove from DB)
+    pub async fn hard_delete_capture(&self, id: &Uuid) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.get_client().await?;
+
+        let result = client.execute("
+            DELETE FROM captures WHERE id = $1
+        ", &[id]).await?;
+
+        Ok(result > 0)
+    }
+
     /// Enqueue capture for analysis
     pub async fn enqueue_analysis(&self, capture_id: &Uuid) -> Result<Uuid, Box<dyn std::error::Error + Send + Sync>> {
         let client = self.get_client().await?;
