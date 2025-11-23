@@ -47,12 +47,19 @@ impl WebhookClient {
         }
     }
 
-    pub async fn send_capture_published(&self, event: CapturePublishedEvent) -> Result<WebhookResponse, Box<dyn std::error::Error + Send + Sync>> {
-        let url = format!("{}/api/v1/webhooks/capture-published", self.stories_service_url);
-        
+    pub async fn send_capture_published(
+        &self,
+        event: CapturePublishedEvent,
+    ) -> Result<WebhookResponse, Box<dyn std::error::Error + Send + Sync>> {
+        let url = format!(
+            "{}/api/v1/webhooks/capture-published",
+            self.stories_service_url
+        );
+
         log::info!("📤 Sending capture published webhook to: {}", url);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .post(&url)
             .json(&event)
             .timeout(std::time::Duration::from_secs(10))
@@ -60,24 +67,34 @@ impl WebhookClient {
             .await?;
 
         let status = response.status();
-        
+
         if status.is_success() {
             let webhook_response: WebhookResponse = response.json().await?;
             log::info!("✅ Webhook sent successfully: {:?}", webhook_response);
             Ok(webhook_response)
         } else {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             log::error!("❌ Webhook failed with status {}: {}", status, error_text);
             Err(format!("Webhook failed: {} - {}", status, error_text).into())
         }
     }
 
-    pub async fn send_capture_unpublished(&self, event: CapturePublishedEvent) -> Result<WebhookResponse, Box<dyn std::error::Error + Send + Sync>> {
-        let url = format!("{}/api/v1/webhooks/capture-unpublished", self.stories_service_url);
-        
+    pub async fn send_capture_unpublished(
+        &self,
+        event: CapturePublishedEvent,
+    ) -> Result<WebhookResponse, Box<dyn std::error::Error + Send + Sync>> {
+        let url = format!(
+            "{}/api/v1/webhooks/capture-unpublished",
+            self.stories_service_url
+        );
+
         log::info!("📤 Sending capture unpublished webhook to: {}", url);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .post(&url)
             .json(&event)
             .timeout(std::time::Duration::from_secs(10))
@@ -85,13 +102,16 @@ impl WebhookClient {
             .await?;
 
         let status = response.status();
-        
+
         if status.is_success() {
             let webhook_response: WebhookResponse = response.json().await?;
             log::info!("✅ Webhook sent successfully: {:?}", webhook_response);
             Ok(webhook_response)
         } else {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             log::error!("❌ Webhook failed with status {}: {}", status, error_text);
             Err(format!("Webhook failed: {} - {}", status, error_text).into())
         }
@@ -113,12 +133,17 @@ pub fn extract_location_from_json(location_json: &serde_json::Value) -> Option<L
 }
 
 /// Extract location info from capture JSON
-pub fn extract_location_info_from_json(location_info_json: &serde_json::Value) -> Option<LocationInfo> {
+pub fn extract_location_info_from_json(
+    location_info_json: &serde_json::Value,
+) -> Option<LocationInfo> {
     if let Some(obj) = location_info_json.as_object() {
         Some(LocationInfo {
             name: obj.get("name").and_then(|v| v.as_str()).map(String::from),
             city: obj.get("city").and_then(|v| v.as_str()).map(String::from),
-            country: obj.get("country").and_then(|v| v.as_str()).map(String::from),
+            country: obj
+                .get("country")
+                .and_then(|v| v.as_str())
+                .map(String::from),
         })
     } else {
         None

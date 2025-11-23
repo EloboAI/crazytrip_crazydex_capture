@@ -49,7 +49,10 @@ async fn main() -> std::io::Result<()> {
             .init();
     }
 
-    log::info!("Starting CrazyTrip Crazydex Capture Service v{}", env!("CARGO_PKG_VERSION"));
+    log::info!(
+        "Starting CrazyTrip Crazydex Capture Service v{}",
+        env!("CARGO_PKG_VERSION")
+    );
     log::info!("Server: {}:{}", config.server.host, config.server.port);
 
     // Initialize database
@@ -83,7 +86,9 @@ async fn main() -> std::io::Result<()> {
     let ai_service = Arc::new(AIService::new(&config.ai));
 
     // Initialize webhook client
-    let webhook_client = Arc::new(WebhookClient::new(config.webhooks.stories_service_url.clone()));
+    let webhook_client = Arc::new(WebhookClient::new(
+        config.webhooks.stories_service_url.clone(),
+    ));
 
     // Spawn analysis worker if enabled
     if config.worker.analysis_enabled {
@@ -101,8 +106,14 @@ async fn main() -> std::io::Result<()> {
 
     // Print access information
     println!("🚀 CrazyTrip Crazydex Capture Service started!");
-    println!("📍 Local access: http://{}:{}", config.server.host, config.server.port);
-    println!("📍 Health check: http://{}:{}/api/v1/health", config.server.host, config.server.port);
+    println!(
+        "📍 Local access: http://{}:{}",
+        config.server.host, config.server.port
+    );
+    println!(
+        "📍 Health check: http://{}:{}/api/v1/health",
+        config.server.host, config.server.port
+    );
     println!("🌍 Environment: {}", config.logging.level);
     println!("📝 Press Ctrl+C to stop the server");
     println!();
@@ -137,15 +148,24 @@ async fn main() -> std::io::Result<()> {
                     .route("/captures/{id}", web::patch().to(update_capture))
                     .route("/captures/{id}", web::delete().to(delete_capture))
                     .route("/captures/{id}/publish", web::patch().to(publish_capture))
-                    .route("/captures/{id}/unpublish", web::patch().to(unpublish_capture))
-                    .route("/sync/upload", web::post().to(sync_upload))
+                    .route(
+                        "/captures/{id}/unpublish",
+                        web::patch().to(unpublish_capture),
+                    )
+                    .route("/sync/upload", web::post().to(sync_upload)),
             )
     })
     .bind((config.server.host.clone(), config.server.port))?
     .workers(config.server.workers)
-    .keep_alive(std::time::Duration::from_secs(config.server.keep_alive_seconds))
-    .client_request_timeout(std::time::Duration::from_secs(config.server.client_timeout_seconds))
-    .client_disconnect_timeout(std::time::Duration::from_secs(config.server.client_shutdown_seconds))
+    .keep_alive(std::time::Duration::from_secs(
+        config.server.keep_alive_seconds,
+    ))
+    .client_request_timeout(std::time::Duration::from_secs(
+        config.server.client_timeout_seconds,
+    ))
+    .client_disconnect_timeout(std::time::Duration::from_secs(
+        config.server.client_shutdown_seconds,
+    ))
     .max_connections(config.server.max_connections)
     .run()
     .await

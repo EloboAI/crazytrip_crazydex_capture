@@ -85,52 +85,102 @@ pub struct WebhookConfig {
 impl AppConfig {
     pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
         let host = env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
-        let port = env::var("PORT").unwrap_or_else(|_| "8081".to_string()).parse::<u16>()?;
-        let workers = env::var("WORKERS").unwrap_or_else(|_| "4".to_string()).parse::<usize>()?;
-        let max_connections = env::var("MAX_CONNECTIONS").unwrap_or_else(|_| "1000".to_string()).parse::<usize>()?;
-        let timeout_seconds = env::var("TIMEOUT_SECONDS").unwrap_or_else(|_| "30".to_string()).parse::<u64>()?;
-        let keep_alive_seconds = env::var("KEEP_ALIVE_SECONDS").unwrap_or_else(|_| "75".to_string()).parse::<u64>()?;
-        let client_timeout_seconds = env::var("CLIENT_TIMEOUT_SECONDS").unwrap_or_else(|_| "30".to_string()).parse::<u64>()?;
-        let client_shutdown_seconds = env::var("CLIENT_SHUTDOWN_SECONDS").unwrap_or_else(|_| "5".to_string()).parse::<u64>()?;
+        let port = env::var("PORT")
+            .unwrap_or_else(|_| "8081".to_string())
+            .parse::<u16>()?;
+        let workers = env::var("WORKERS")
+            .unwrap_or_else(|_| "4".to_string())
+            .parse::<usize>()?;
+        let max_connections = env::var("MAX_CONNECTIONS")
+            .unwrap_or_else(|_| "1000".to_string())
+            .parse::<usize>()?;
+        let timeout_seconds = env::var("TIMEOUT_SECONDS")
+            .unwrap_or_else(|_| "30".to_string())
+            .parse::<u64>()?;
+        let keep_alive_seconds = env::var("KEEP_ALIVE_SECONDS")
+            .unwrap_or_else(|_| "75".to_string())
+            .parse::<u64>()?;
+        let client_timeout_seconds = env::var("CLIENT_TIMEOUT_SECONDS")
+            .unwrap_or_else(|_| "30".to_string())
+            .parse::<u64>()?;
+        let client_shutdown_seconds = env::var("CLIENT_SHUTDOWN_SECONDS")
+            .unwrap_or_else(|_| "5".to_string())
+            .parse::<u64>()?;
 
         let database_url = env::var("DATABASE_URL")?;
-        let db_max_connections = env::var("DB_MAX_CONNECTIONS").unwrap_or_else(|_| "10".to_string()).parse::<u32>()?;
-        let db_min_connections = env::var("DB_MIN_CONNECTIONS").unwrap_or_else(|_| "1".to_string()).parse::<u32>()?;
-        let db_connect_timeout = env::var("DB_CONNECT_TIMEOUT").unwrap_or_else(|_| "10".to_string()).parse::<u64>()?;
-        let db_idle_timeout = env::var("DB_IDLE_TIMEOUT").unwrap_or_else(|_| "300".to_string()).parse::<u64>()?;
-        let db_max_lifetime = env::var("DB_MAX_LIFETIME").unwrap_or_else(|_| "3600".to_string()).parse::<u64>()?;
+        let db_max_connections = env::var("DB_MAX_CONNECTIONS")
+            .unwrap_or_else(|_| "10".to_string())
+            .parse::<u32>()?;
+        let db_min_connections = env::var("DB_MIN_CONNECTIONS")
+            .unwrap_or_else(|_| "1".to_string())
+            .parse::<u32>()?;
+        let db_connect_timeout = env::var("DB_CONNECT_TIMEOUT")
+            .unwrap_or_else(|_| "10".to_string())
+            .parse::<u64>()?;
+        let db_idle_timeout = env::var("DB_IDLE_TIMEOUT")
+            .unwrap_or_else(|_| "300".to_string())
+            .parse::<u64>()?;
+        let db_max_lifetime = env::var("DB_MAX_LIFETIME")
+            .unwrap_or_else(|_| "3600".to_string())
+            .parse::<u64>()?;
 
         let aws_region = env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
         let aws_access_key_id = env::var("AWS_ACCESS_KEY_ID")?;
         let aws_secret_access_key = env::var("AWS_SECRET_ACCESS_KEY")?;
         let s3_bucket = env::var("S3_BUCKET")?;
         let s3_endpoint = env::var("S3_ENDPOINT").ok();
-        let max_image_size_bytes = env::var("MAX_IMAGE_SIZE_BYTES").unwrap_or_else(|_| "10485760".to_string()).parse::<usize>()?;
+        let max_image_size_bytes = env::var("MAX_IMAGE_SIZE_BYTES")
+            .unwrap_or_else(|_| "10485760".to_string())
+            .parse::<usize>()?;
 
         let gemini_api_key = env::var("GEMINI_API_KEY")?;
-        let gemini_endpoint = env::var("GEMINI_ENDPOINT").unwrap_or_else(|_| "https://generativelanguage.googleapis.com/v1".to_string());
-        let gemini_model = env::var("GEMINI_MODEL").unwrap_or_else(|_| "models/gemini-2.5-flash".to_string());
+        let gemini_endpoint = env::var("GEMINI_ENDPOINT")
+            .unwrap_or_else(|_| "https://generativelanguage.googleapis.com/v1".to_string());
+        let gemini_model =
+            env::var("GEMINI_MODEL").unwrap_or_else(|_| "models/gemini-2.5-flash".to_string());
 
         let cors_allowed_origins = env::var("CORS_ALLOWED_ORIGINS")
             .unwrap_or_else(|_| "http://localhost:3000".to_string())
             .split(',')
             .map(|s| s.trim().to_string())
             .collect();
-        let rate_limit_requests = env::var("RATE_LIMIT_REQUESTS").unwrap_or_else(|_| "100".to_string()).parse::<u32>()?;
-        let rate_limit_window_seconds = env::var("RATE_LIMIT_WINDOW_SECONDS").unwrap_or_else(|_| "60".to_string()).parse::<u64>()?;
-        let max_request_size_bytes = env::var("MAX_REQUEST_SIZE_BYTES").unwrap_or_else(|_| "52428800".to_string()).parse::<usize>()?;
+        let rate_limit_requests = env::var("RATE_LIMIT_REQUESTS")
+            .unwrap_or_else(|_| "100".to_string())
+            .parse::<u32>()?;
+        let rate_limit_window_seconds = env::var("RATE_LIMIT_WINDOW_SECONDS")
+            .unwrap_or_else(|_| "60".to_string())
+            .parse::<u64>()?;
+        let max_request_size_bytes = env::var("MAX_REQUEST_SIZE_BYTES")
+            .unwrap_or_else(|_| "52428800".to_string())
+            .parse::<usize>()?;
 
         let logging_level = env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
         let logging_format = env::var("LOG_FORMAT").unwrap_or_else(|_| "json".to_string());
 
-        let analysis_enabled = env::var("ANALYSIS_WORKER_ENABLED").unwrap_or_else(|_| "true".to_string()).to_lowercase() == "true";
-        let analysis_interval_seconds = env::var("ANALYSIS_WORKER_INTERVAL_SECONDS").unwrap_or_else(|_| "30".to_string()).parse::<u64>()?;
-        let thumbnail_enabled = env::var("THUMBNAIL_GENERATION_ENABLED").unwrap_or_else(|_| "true".to_string()).to_lowercase() == "true";
-        let max_thumbnail_width = env::var("MAX_THUMBNAIL_WIDTH").unwrap_or_else(|_| "400".to_string()).parse::<u32>()?;
-        let max_thumbnail_height = env::var("MAX_THUMBNAIL_HEIGHT").unwrap_or_else(|_| "400".to_string()).parse::<u32>()?;
+        let analysis_enabled = env::var("ANALYSIS_WORKER_ENABLED")
+            .unwrap_or_else(|_| "true".to_string())
+            .to_lowercase()
+            == "true";
+        let analysis_interval_seconds = env::var("ANALYSIS_WORKER_INTERVAL_SECONDS")
+            .unwrap_or_else(|_| "30".to_string())
+            .parse::<u64>()?;
+        let thumbnail_enabled = env::var("THUMBNAIL_GENERATION_ENABLED")
+            .unwrap_or_else(|_| "true".to_string())
+            .to_lowercase()
+            == "true";
+        let max_thumbnail_width = env::var("MAX_THUMBNAIL_WIDTH")
+            .unwrap_or_else(|_| "400".to_string())
+            .parse::<u32>()?;
+        let max_thumbnail_height = env::var("MAX_THUMBNAIL_HEIGHT")
+            .unwrap_or_else(|_| "400".to_string())
+            .parse::<u32>()?;
 
-        let stories_service_url = env::var("STORIES_SERVICE_URL").unwrap_or_else(|_| "http://localhost:8083".to_string());
-        let webhooks_enabled = env::var("WEBHOOKS_ENABLED").unwrap_or_else(|_| "true".to_string()).to_lowercase() == "true";
+        let stories_service_url =
+            env::var("STORIES_SERVICE_URL").unwrap_or_else(|_| "http://localhost:8083".to_string());
+        let webhooks_enabled = env::var("WEBHOOKS_ENABLED")
+            .unwrap_or_else(|_| "true".to_string())
+            .to_lowercase()
+            == "true";
 
         Ok(Self {
             server: ServerConfig {

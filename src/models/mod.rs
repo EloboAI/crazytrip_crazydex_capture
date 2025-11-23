@@ -8,6 +8,7 @@ use validator::Validate;
 pub struct Capture {
     pub id: Uuid,
     pub user_id: Option<Uuid>,
+    pub author_name: Option<String>,
     pub device_local_id: Option<String>,
     pub image_url: String,
     pub thumbnail_url: Option<String>,
@@ -32,6 +33,7 @@ pub struct Capture {
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateCaptureRequest {
     pub user_id: Option<Uuid>,
+    pub author_name: Option<String>,
     pub device_local_id: Option<String>,
     #[validate(url)]
     pub image_url: String,
