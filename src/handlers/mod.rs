@@ -6,6 +6,7 @@ use validator::Validate;
 use crate::database::DatabaseService;
 use crate::models::*;
 use crate::storage::S3Service;
+use crate::webhooks::{self, WebhookClient, CapturePublishedEvent};
 use serde_json::Value as JsonValue;
 
 /// Health check endpoint
@@ -310,4 +311,104 @@ pub async fn sync_upload(
 
     let response = SyncUploadResponse { synced, failed };
     Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
+}
+
+/// Publish a capture (make it visible in public feed)
+pub async fn publish_capture(
+    path: web::Path<Uuid>,
+    db_service: web::Data<Arc<DatabaseService>>,
+    webhook_client: web::Data<Arc<WebhookClient>>,
+    webhooks_enabled: web::Data<bool>,
+) -> Result<HttpResponse> {
+    let capture_id = path.into_inner();
+    log::info!("📢 Publishing capture: {}", capture_id);
+
+    match db_service.publish_capture(&capture_id).await {
+        Ok(Some(capture)) => {
+            log::info!("✅ Capture published successfully: {}", capture_id);
+            
+            // Send webhook if enabled
+            if *webhooks_enabled.as_ref() {
+                let event = CapturePublishedEvent {
+                    capture_id: capture.id,
+                    author_id: capture.user_id.unwrap_or_else(|| Uuid::nil()),
+                    author_name: None, // TODO: fetch from user service
+                    image_url: capture.image_url.clone(),
+                    thumbnail_url: capture.thumbnail_url.clone(),
+                    category: capture.category.clone(),
+                    tags: capture.tags.clone(),
+                    location: capture.location.as_ref()
+                        .and_then(|loc| webhooks::extract_location_from_json(loc)),
+                    location_info: capture.location_info.as_ref()
+                        .and_then(|info| webhooks::extract_location_info_from_json(info)),
+                };
+
+                tokio::spawn(async move {
+                    if let Err(e) = webhook_client.send_capture_published(event).await {
+                        log::error!("❌ Failed to send webhook: {}", e);
+                    }
+                });
+            }
+            
+            Ok(HttpResponse::Ok().json(ApiResponse::success(capture)))
+        }
+        Ok(None) => {
+            log::warn!("❌ Capture not found: {}", capture_id);
+            Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Capture not found".to_string())))
+        }
+        Err(e) => {
+            log::error!("❌ Failed to publish capture: {}", e);
+            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to publish capture".to_string())))
+        }
+    }
+}
+
+/// Unpublish a capture (remove from public feed)
+pub async fn unpublish_capture(
+    path: web::Path<Uuid>,
+    db_service: web::Data<Arc<DatabaseService>>,
+    webhook_client: web::Data<Arc<WebhookClient>>,
+    webhooks_enabled: web::Data<bool>,
+) -> Result<HttpResponse> {
+    let capture_id = path.into_inner();
+    log::info!("🔇 Unpublishing capture: {}", capture_id);
+
+    match db_service.unpublish_capture(&capture_id).await {
+        Ok(Some(capture)) => {
+            log::info!("✅ Capture unpublished successfully: {}", capture_id);
+            
+            // Send webhook if enabled
+            if *webhooks_enabled.as_ref() {
+                let event = CapturePublishedEvent {
+                    capture_id: capture.id,
+                    author_id: capture.user_id.unwrap_or_else(|| Uuid::nil()),
+                    author_name: None,
+                    image_url: capture.image_url.clone(),
+                    thumbnail_url: capture.thumbnail_url.clone(),
+                    category: capture.category.clone(),
+                    tags: capture.tags.clone(),
+                    location: capture.location.as_ref()
+                        .and_then(|loc| webhooks::extract_location_from_json(loc)),
+                    location_info: capture.location_info.as_ref()
+                        .and_then(|info| webhooks::extract_location_info_from_json(info)),
+                };
+
+                tokio::spawn(async move {
+                    if let Err(e) = webhook_client.send_capture_unpublished(event).await {
+                        log::error!("❌ Failed to send webhook: {}", e);
+                    }
+                });
+            }
+            
+            Ok(HttpResponse::Ok().json(ApiResponse::success(capture)))
+        }
+        Ok(None) => {
+            log::warn!("❌ Capture not found: {}", capture_id);
+            Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Capture not found".to_string())))
+        }
+        Err(e) => {
+            log::error!("❌ Failed to unpublish capture: {}", e);
+            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to unpublish capture".to_string())))
+        }
+    }
 }

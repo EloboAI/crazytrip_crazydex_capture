@@ -4,6 +4,7 @@ mod database;
 mod handlers;
 mod models;
 mod storage;
+mod webhooks;
 mod workers;
 
 use actix_web::{middleware as actix_middleware, web, App, HttpServer};
@@ -15,6 +16,7 @@ use config::AppConfig;
 use database::DatabaseService;
 use handlers::*;
 use storage::S3Service;
+use webhooks::WebhookClient;
 use workers::AnalysisWorker;
 
 #[actix_web::main]
@@ -80,6 +82,9 @@ async fn main() -> std::io::Result<()> {
     // Initialize AI service
     let ai_service = Arc::new(AIService::new(&config.ai));
 
+    // Initialize webhook client
+    let webhook_client = Arc::new(WebhookClient::new(config.webhooks.stories_service_url.clone()));
+
     // Spawn analysis worker if enabled
     if config.worker.analysis_enabled {
         let worker = AnalysisWorker::new(
@@ -109,6 +114,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(Arc::clone(&db_service)))
             .app_data(web::Data::new(Arc::clone(&s3_service)))
             .app_data(web::Data::new(Arc::clone(&ai_service)))
+            .app_data(web::Data::new(Arc::clone(&webhook_client)))
+            .app_data(web::Data::new(config.webhooks.enabled))
             // Middleware
             .wrap(actix_middleware::Logger::default())
             .wrap(actix_middleware::Compress::default())
@@ -129,6 +136,8 @@ async fn main() -> std::io::Result<()> {
                     .route("/captures/{id}", web::get().to(get_capture))
                     .route("/captures/{id}", web::patch().to(update_capture))
                     .route("/captures/{id}", web::delete().to(delete_capture))
+                    .route("/captures/{id}/publish", web::patch().to(publish_capture))
+                    .route("/captures/{id}/unpublish", web::patch().to(unpublish_capture))
                     .route("/sync/upload", web::post().to(sync_upload))
             )
     })

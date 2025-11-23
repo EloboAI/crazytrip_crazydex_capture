@@ -11,6 +11,7 @@ pub struct AppConfig {
     pub security: SecurityConfig,
     pub logging: LoggingConfig,
     pub worker: WorkerConfig,
+    pub webhooks: WebhookConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,6 +76,12 @@ pub struct WorkerConfig {
     pub max_thumbnail_height: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebhookConfig {
+    pub stories_service_url: String,
+    pub enabled: bool,
+}
+
 impl AppConfig {
     pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
         let host = env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
@@ -121,6 +128,9 @@ impl AppConfig {
         let thumbnail_enabled = env::var("THUMBNAIL_GENERATION_ENABLED").unwrap_or_else(|_| "true".to_string()).to_lowercase() == "true";
         let max_thumbnail_width = env::var("MAX_THUMBNAIL_WIDTH").unwrap_or_else(|_| "400".to_string()).parse::<u32>()?;
         let max_thumbnail_height = env::var("MAX_THUMBNAIL_HEIGHT").unwrap_or_else(|_| "400".to_string()).parse::<u32>()?;
+
+        let stories_service_url = env::var("STORIES_SERVICE_URL").unwrap_or_else(|_| "http://localhost:8083".to_string());
+        let webhooks_enabled = env::var("WEBHOOKS_ENABLED").unwrap_or_else(|_| "true".to_string()).to_lowercase() == "true";
 
         Ok(Self {
             server: ServerConfig {
@@ -170,6 +180,10 @@ impl AppConfig {
                 thumbnail_enabled,
                 max_thumbnail_width,
                 max_thumbnail_height,
+            },
+            webhooks: WebhookConfig {
+                stories_service_url,
+                enabled: webhooks_enabled,
             },
         })
     }

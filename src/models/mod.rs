@@ -25,6 +25,7 @@ pub struct Capture {
     pub updated_at: DateTime<Utc>,
     pub difficulty: Option<String>,
     pub verified: Option<bool>,
+    pub is_public: bool,
 }
 
 /// Request para crear una captura

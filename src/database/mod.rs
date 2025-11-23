@@ -135,7 +135,7 @@ impl DatabaseService {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             RETURNING id, user_id, device_local_id, image_url, thumbnail_url, image_size, storage_type,
                       vision_result, category, confidence, tags, location, location_info, orientation,
-                      is_deleted, created_at, updated_at, difficulty, verified
+                      is_deleted, created_at, updated_at, difficulty, verified, is_public
         ", &[
             &id, &req.user_id, &req.device_local_id, &req.image_url, &req.thumbnail_url, &req.image_size,
             &req.vision_result, &req.category, &req.confidence, &req.tags, &req.location, &req.location_info,
@@ -152,7 +152,7 @@ impl DatabaseService {
         let rows = client.query("
             SELECT id, user_id, device_local_id, image_url, thumbnail_url, image_size, storage_type,
                    vision_result, category, confidence, tags, location, location_info, orientation,
-                   is_deleted, created_at, updated_at, difficulty, verified
+                   is_deleted, created_at, updated_at, difficulty, verified, is_public
             FROM captures WHERE id = $1 AND is_deleted = false
         ", &[id]).await?;
 
@@ -185,13 +185,13 @@ impl DatabaseService {
         let query = if user_id.is_some() {
             "SELECT id, user_id, device_local_id, image_url, thumbnail_url, image_size, storage_type,
                     vision_result, category, confidence, tags, location, location_info, orientation,
-                    is_deleted, created_at, updated_at, difficulty, verified
+                    is_deleted, created_at, updated_at, difficulty, verified, is_public
              FROM captures WHERE user_id = $1 AND is_deleted = false
              ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         } else {
             "SELECT id, user_id, device_local_id, image_url, thumbnail_url, image_size, storage_type,
                     vision_result, category, confidence, tags, location, location_info, orientation,
-                    is_deleted, created_at, updated_at, difficulty, verified
+                    is_deleted, created_at, updated_at, difficulty, verified, is_public
              FROM captures WHERE is_deleted = false
              ORDER BY created_at DESC LIMIT $1 OFFSET $2"
         };
@@ -220,7 +220,7 @@ impl DatabaseService {
             WHERE id = $1 AND is_deleted = false
             RETURNING id, user_id, device_local_id, image_url, thumbnail_url, image_size, storage_type,
                       vision_result, category, confidence, tags, location, location_info, orientation,
-                      is_deleted, created_at, updated_at, difficulty, verified
+                      is_deleted, created_at, updated_at, difficulty, verified, is_public
         ", &[id, &req.tags, &req.category, &now]).await?;
 
         Ok(row.map(|r| Self::row_to_capture(&r)))
@@ -236,6 +236,36 @@ impl DatabaseService {
         ", &[id]).await?;
 
         Ok(result > 0)
+    }
+
+    /// Publish a capture (set is_public = true)
+    pub async fn publish_capture(&self, id: &Uuid) -> Result<Option<Capture>, Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.get_client().await?;
+
+        let row = client.query_opt("
+            UPDATE captures SET is_public = true, updated_at = NOW()
+            WHERE id = $1 AND is_deleted = false
+            RETURNING id, user_id, device_local_id, image_url, thumbnail_url, image_size, storage_type,
+                      vision_result, category, confidence, tags, location, location_info, orientation,
+                      is_deleted, created_at, updated_at, difficulty, verified, is_public
+        ", &[id]).await?;
+
+        Ok(row.map(|r| Self::row_to_capture(&r)))
+    }
+
+    /// Unpublish a capture (set is_public = false)
+    pub async fn unpublish_capture(&self, id: &Uuid) -> Result<Option<Capture>, Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.get_client().await?;
+
+        let row = client.query_opt("
+            UPDATE captures SET is_public = false, updated_at = NOW()
+            WHERE id = $1 AND is_deleted = false
+            RETURNING id, user_id, device_local_id, image_url, thumbnail_url, image_size, storage_type,
+                      vision_result, category, confidence, tags, location, location_info, orientation,
+                      is_deleted, created_at, updated_at, difficulty, verified, is_public
+        ", &[id]).await?;
+
+        Ok(row.map(|r| Self::row_to_capture(&r)))
     }
 
     /// Hard delete capture (permanently remove from DB)
@@ -417,6 +447,7 @@ impl DatabaseService {
             updated_at: row.get(16),
             difficulty: row.get(17),
             verified: row.get(18),
+            is_public: row.get(19),
         }
     }
 }
