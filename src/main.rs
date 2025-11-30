@@ -67,7 +67,7 @@ async fn main() -> std::io::Result<()> {
 
     // Initialize schema
     if let Err(e) = db_service.init_schema().await {
-        log::error!("Failed to initialize DB schema: {}", e);
+        log::error!("Failed to initialize DB schema: {:#?}", e);
     } else {
         log::info!("DB schema ensured");
     }
